@@ -1,33 +1,54 @@
-use opentelemetry::trace::{Tracer, TracerProvider as _};
-use opentelemetry_sdk::trace::TracerProvider;
-use tracing::debug;
-use tracing::{error, span};
-use tracing_subscriber;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::Registry;
+use opentelemetry::trace::get_active_span;
+use opentelemetry::trace::Tracer;
+use opentelemetry::trace::TracerProvider as _;
+use opentelemetry::{global, Key, KeyValue, Value};
+use opentelemetry_otlp::SpanExporter;
+// use opentelemetry_sdk::export::trace::SpanExporter as _;
+use opentelemetry_sdk::{
+    runtime,
+    trace::{RandomIdGenerator, Sampler, TracerProvider},
+    Resource,
+};
+/*
 
-fn main() {
+use opentelemetry_semantic_conventions::{
+    attribute::{SERVICE_NAME, SERVICE_VERSION},
+    SCHEMA_URL,
+};
+// Create a Resource that captures information about the entity for which telemetry is recorded.
+fn resource() -> Resource {
+    Resource::from_schema_url(
+        [
+            KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
+            KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
+        ],
+        SCHEMA_URL,
+    )
+}
+*/
 
-    // Create a new OpenTelemetry trace pipeline that prints to stdout
-    let exporter = opentelemetry_stdout::SpanExporter::default();
-    let provider = TracerProvider::builder()
+
+#[tokio::main]
+async fn main() {
+    let exporter = SpanExporter::builder().with_tonic().build().unwrap();
+
+    let provider = opentelemetry_sdk::trace::TracerProvider::builder()
         .with_simple_exporter(exporter)
         .build();
-    let tracer = provider.tracer("learning");
 
-    // Create a tracing layer with the configured tracer
-    let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
+    let tracer = provider.tracer("trace_demo");
 
-    // Use the tracing subscriber `Registry`, or any other subscriber
-    // that impls `LookupSpan`
-    let subscriber = Registry::default().with(telemetry);
-
-    tracing::subscriber::with_default(subscriber, || {
-        // Spans will be sent to the configured OpenTelemetry exporter
-        let root = span!(tracing::Level::TRACE, "app_start", work_units = 2);
-        let _enter = root.enter();
-
-        error!("This event will be logged in the root span.");
+    tracer.in_span("experiment", |_context| {
+        get_active_span(|span| {
+            span.set_attribute(KeyValue::new(
+                Key::from_static_str("year"),
+                Value::I64(3434),
+            ));
+        })
     });
 
+    global::set_tracer_provider(provider.clone());
+
+    // Ensure all spans are exported before the program exits
+    global::shutdown_tracer_provider();
 }
