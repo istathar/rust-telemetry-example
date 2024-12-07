@@ -3,40 +3,36 @@ use opentelemetry::trace::Tracer;
 use opentelemetry::trace::TracerProvider as _;
 use opentelemetry::{global, Key, KeyValue, Value};
 use opentelemetry_otlp::SpanExporter;
-// use opentelemetry_sdk::export::trace::SpanExporter as _;
-use opentelemetry_sdk::{
-    runtime,
-    trace::{RandomIdGenerator, Sampler, TracerProvider},
-    Resource,
-};
-/*
-
+use opentelemetry_sdk::{trace::TracerProvider, Resource};
 use opentelemetry_semantic_conventions::{
     attribute::{SERVICE_NAME, SERVICE_VERSION},
     SCHEMA_URL,
 };
-// Create a Resource that captures information about the entity for which telemetry is recorded.
-fn resource() -> Resource {
-    Resource::from_schema_url(
+
+#[tokio::main]
+async fn main() {
+    let resource = Resource::from_schema_url(
         [
             KeyValue::new(SERVICE_NAME, env!("CARGO_PKG_NAME")),
             KeyValue::new(SERVICE_VERSION, env!("CARGO_PKG_VERSION")),
         ],
         SCHEMA_URL,
-    )
-}
-*/
+    );
 
+    let exporter = SpanExporter::builder()
+        .with_tonic()
+        .build()
+        .unwrap();
 
-#[tokio::main]
-async fn main() {
-    let exporter = SpanExporter::builder().with_tonic().build().unwrap();
-
-    let provider = opentelemetry_sdk::trace::TracerProvider::builder()
+    let provider = TracerProvider::builder()
         .with_simple_exporter(exporter)
+        .with_resource(resource)
         .build();
 
     let tracer = provider.tracer("trace_demo");
+
+
+    global::set_tracer_provider(provider);
 
     tracer.in_span("experiment", |_context| {
         get_active_span(|span| {
@@ -46,8 +42,6 @@ async fn main() {
             ));
         })
     });
-
-    global::set_tracer_provider(provider.clone());
 
     // Ensure all spans are exported before the program exits
     global::shutdown_tracer_provider();
